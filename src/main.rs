@@ -23,8 +23,6 @@ async fn hello_post(body: Json<JsonBody<'_>>) -> Value {
 #[put("/hello", format = "json", data = "<body>")]
 async fn hello_update(body: Json<UpdateBody<'_>>) -> Value {
     let db = Db::get_db().await;
-    //pass to item name
-    //find, then reutrn
     db.update(body).await
 }
 

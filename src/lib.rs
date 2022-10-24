@@ -31,6 +31,7 @@ pub mod lib {
         price: f64,
         quantity: i32,
     }
+
     #[derive(Debug, Serialize, Deserialize)]
     #[serde(crate = "rocket::serde")]
     pub struct UpdateBody<'r> {
