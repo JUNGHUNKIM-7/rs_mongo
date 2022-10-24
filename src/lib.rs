@@ -1,26 +1,27 @@
 pub mod lib {
-    use std::env;
-
     use mongodb::{
-        bson::{bson, doc, from_bson, DateTime, Document},
+        bson::{self, bson, doc, from_bson, oid::ObjectId, Document},
         options::{ClientOptions, FindOptions},
         Client, Collection,
     };
-    use rocket::serde::{
-        json::{Json, Value},
-        Deserialize, Serialize,
+    use rocket::{
+        futures::TryStreamExt,
+        serde::{
+            json::{serde_json::json, Json, Value},
+            Deserialize, Serialize,
+        },
     };
-    use rocket::{futures::TryStreamExt, serde::json::serde_json::json};
+    use std::env;
 
     #[derive(Debug, Serialize, Deserialize)]
     #[serde(crate = "rocket::serde")]
     pub struct Doc {
         #[serde(rename = "_id")]
-        pub id: i32,
+        pub id: ObjectId,
         pub item: String,
         pub price: f64,
         pub quantity: i32,
-        pub date: DateTime,
+        pub date: bson::DateTime,
     }
 
     #[derive(Debug, Serialize, Deserialize)]
@@ -29,6 +30,11 @@ pub mod lib {
         item: &'r str,
         price: f64,
         quantity: i32,
+    }
+    #[derive(Debug, Serialize, Deserialize)]
+    #[serde(crate = "rocket::serde")]
+    pub struct UpdateBody<'r> {
+        item: &'r str,
     }
 
     pub struct Options {
@@ -122,8 +128,10 @@ pub mod lib {
             let d = doc! {
                 "item" : body.0.item,
                 "price" : body.0.price,
-                "quantity" : body.0.quantity
+                "quantity" : body.0.quantity,
+                "date": bson::DateTime::now(),
             };
+
             coll.insert_one(&d, None)
                 .await
                 .unwrap_or_else(|err| panic!("{}", err));
@@ -133,6 +141,64 @@ pub mod lib {
                 "status_code": 200,
                 "message": "success"
             })
+        }
+
+        pub async fn check_user(coll: &Collection<Document>, body: &Json<UpdateBody<'_>>) -> bool {
+            let exist = coll
+                .find_one(doc! {"item": body.0.item}, None)
+                .await
+                .unwrap();
+
+            if exist.is_some() {
+                true
+            } else {
+                false
+            }
+        }
+
+        pub async fn update(&self, body: Json<UpdateBody<'_>>) -> Value {
+            let coll = &self.coll;
+            let exist = Self::check_user(coll, &body).await;
+
+            if exist {
+                let update = doc! {
+                    "$set" : {
+                        "item" : "new item",
+                    }
+                };
+                coll.update_one(doc! {"item": body.0.item }, update, None)
+                    .await
+                    .unwrap_or_else(|err| panic!("failed to update :{}", err));
+                json!({
+                    "status_code" : 201,
+                    "message" : "updated"
+                })
+            } else {
+                json!({
+                    "status_code" : 401,
+                    "message" : "not found user"
+                })
+            }
+        }
+
+        pub async fn delete(&self, body: Json<UpdateBody<'_>>) -> Value {
+            let coll = &self.coll;
+            let exist = Self::check_user(coll, &body).await;
+
+            if exist {
+                coll.delete_one(doc! {"item" : body.0.item}, None)
+                    .await
+                    .unwrap_or_else(|err| panic!("{}", err));
+                json!({
+                    "status_code" : 200,
+                    "message" : "deleted"
+                })
+            } else {
+                json!({
+                    "status_code" : 401,
+                    "message" : "not found user"
+                })
+            }
         }
     }
 }
