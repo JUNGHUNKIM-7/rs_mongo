@@ -1,31 +1,23 @@
 use dotenvy::dotenv;
 use mongodb::bson::doc;
-use roc::lib::{CollData, CrudOps, DocumentArg, Run};
-use rocket::serde::json::Json;
+use roc::lib::{Db, Doc, JsonBody, Options};
+use rocket::serde::json::{Json, Value};
 use std::error::Error;
 
 #[macro_use]
 extern crate rocket;
 
 #[get("/hello")]
-async fn hello() -> Option<Json<Vec<CollData>>> {
-    let doc = DocumentArg::new(None, Some(doc! {"id" : 1}));
-    CrudOps::run(Run::Get(doc)).await
+async fn hello() -> Option<Json<Vec<Doc>>> {
+    let ops = Options::new(None, Some(doc! {"id" : 1}));
+    let db = Db::get_db().await;
+    db.get(ops.filter_doc, ops.sort_option).await
 }
 
-#[get("/hello/<id>")]
-fn hello_by_id(id: &str) -> String {
-    todo!()
-}
-
-#[get("/hello/<id>/<name>/<cool>")]
-fn hello_multi(id: &str, name: &str, cool: bool) -> String {
-    todo!()
-}
-
-#[get("/hello/<_>/world")]
-fn hello_world() -> &'static str {
-    "hello/whatever/world"
+#[post("/hello", format = "json", data = "<body>")]
+async fn hello_post(body: Json<JsonBody<'_>>) -> Value {
+    let db = Db::get_db().await;
+    db.post(body).await
 }
 
 #[rocket::main]
@@ -34,7 +26,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     const ROOT: &str = "/api";
 
     let _rocket = rocket::build()
-        .mount(ROOT, routes![hello, hello_by_id, hello_multi, hello_world])
+        .mount(ROOT, routes![hello, hello_post])
         // .mount(ROOT, FileServer::from("static/"))
         .launch()
         .await?;
